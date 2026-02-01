@@ -1,0 +1,45 @@
+name: .NET Build
+description: Collects build info, sets up .NET SDK, and optionally builds
+
+inputs:
+  setup-dotnet:
+    description: Whether to setup .NET SDK
+    required: false
+    default: "true"
+  build:
+    description: Whether to build and create Thunderstore package
+    required: false
+    default: "false"
+
+outputs:
+  version:
+    description: Version from csproj
+    value: ${{ steps.info.outputs.version }}
+  csproj:
+    description: Path to csproj file
+    value: ${{ steps.info.outputs.csproj }}
+  sha_short:
+    description: Short commit SHA
+    value: ${{ steps.info.outputs.sha_short }}
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/collect-build-info
+      id: info
+
+    - uses: actions/setup-dotnet@baa11fbfe1d6520db94683bd5c7a3818018e4309 # v5.1.0
+      if: inputs.setup-dotnet == 'true'
+      with:
+        global-json-file: global.json
+
+    - name: Build
+      if: inputs.build == 'true'
+      shell: bash
+      run: dotnet build -c Release
+
+    - name: Pack Package
+      if: inputs.build == 'true'
+      shell: nu {0}
+      run: |
+        dotnet pack -c Release --no-build -o ./build
