@@ -1,0 +1,61 @@
+[package]
+versioned_files = [
+    { path = "ResoniteDownloader/ResoniteDownloader.csproj", regex = '<Version>(?<version>\d+\.\d+\.\d+)</Version>' },
+]
+changelog = "CHANGELOG.md"
+assets = "build/*.nupkg"
+extra_changelog_sections = [
+    { name = "Notes", footers = [
+        "Changelog-Note",
+    ], types = [
+        "note",
+    ] },
+]
+
+[[workflows]]
+name = "prepare-release"
+
+[[workflows.steps]]
+type = "Command"
+command = "git switch -c release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore: prepare release $version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release"
+
+[[workflows.steps]]
+type = "CreatePullRequest"
+base = "main"
+
+[workflows.steps.title]
+template = "chore: prepare release $version"
+
+[workflows.steps.body]
+template = """
+> [!IMPORTANT]
+> Merging this PR will create a new release.
+
+$changelog"""
+
+[[workflows]]
+name = "release"
+
+[[workflows.steps]]
+type = "Release"
+
+[[workflows]]
+name = "document-change"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
+
+[github]
+owner = "hazre"
+repo = "ResoniteDownloader"

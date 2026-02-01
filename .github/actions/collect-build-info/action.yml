@@ -1,0 +1,31 @@
+name: Collect Build Info
+description: Sets up Nushell and collects build info from knope.toml
+
+outputs:
+  version:
+    description: Version from csproj
+    value: ${{ steps.info.outputs.version }}
+  csproj:
+    description: Path to csproj file
+    value: ${{ steps.info.outputs.csproj }}
+  sha_short:
+    description: Short commit SHA
+    value: ${{ steps.info.outputs.sha_short }}
+
+runs:
+  using: composite
+  steps:
+    - uses: hustcer/setup-nu@920172d92eb04671776f3ba69d605d3b09351c30 # v3
+      with:
+        version: "0.110.0"
+
+    - name: Collect build info
+      id: info
+      shell: nu {0}
+      run: |
+        let sha_short = git rev-parse --short HEAD | str trim
+        let csproj = open knope.toml | get package.versioned_files.0.path
+        let version = open $csproj --raw | from xml | get content | where tag == "PropertyGroup" | first | get content | where tag == "Version" | first | get content | first | get content
+        $"sha_short=($sha_short)\n" | save -a --raw $env.GITHUB_OUTPUT
+        $"csproj=($csproj)\n" | save -a --raw $env.GITHUB_OUTPUT
+        $"version=($version)\n" | save -a --raw $env.GITHUB_OUTPUT
