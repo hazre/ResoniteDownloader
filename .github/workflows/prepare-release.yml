@@ -1,0 +1,92 @@
+name: Create Release PR
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  prepare-release:
+    if: "!contains(github.event.head_commit.message, 'chore: prepare release')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: fregante/setup-git-user@024bc0b8e177d7e77203b48dab6fb45666854b35 # v2.0.2
+      - uses: ./.github/actions/collect-build-info
+        id: info
+      - uses: knope-dev/action@407e9ef7c272d2dd53a4e71e39a7839e29933c48 # v2.1.0
+        with:
+          version: 0.22.1
+      - name: Prepare Release
+        id: knope
+        shell: nu {0}
+        run: |
+          let version = $env.VERSION
+          let has_tag = (git tag -l "v1.0.0" | str trim) == "v1.0.0"
+          let needs_override = $version == "1.0.0" and not $has_tag
+          let result = if $needs_override {
+            do -i { knope prepare-release --verbose --override-version 1.0.0 } | complete
+          } else {
+            do -i { knope prepare-release --verbose } | complete
+          }
+          if $result.exit_code == 0 {
+            "released=true\n" | save -a --raw $env.GITHUB_OUTPUT
+          } else {
+            "released=false\n" | save -a --raw $env.GITHUB_OUTPUT
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.info.outputs.version }}
+    outputs:
+      released: ${{ steps.knope.outputs.released }}
+
+  build-preview:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: release
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/dotnet-build
+        id: setup
+        with:
+          build: "true"
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
+        with:
+          subject-path: "./build/*.nupkg"
+      - name: Upload Preview Artifacts
+        id: upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ResoniteDownloader-${{ steps.setup.outputs.version }}-preview
+          path: ./build/*.nupkg
+      - name: Update PR Body
+        shell: nu {0}
+        run: |
+          let current_body = gh pr view release --json body -q '.body'
+          let new_body = $"($current_body)
+
+          ## Preview Build
+
+          [Download ResoniteDownloader-($env.PACKAGE_VERSION)-preview]\(($env.ARTIFACT_URL))"
+          gh pr edit release --body $new_body
+        env:
+          PACKAGE_VERSION: ${{ steps.setup.outputs.version }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
