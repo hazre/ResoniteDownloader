@@ -1,3 +1,9 @@
+## 1.0.1 (2026-02-03)
+
+### Fixes
+
+- add build-id output to resolve-version
+
 ## 1.0.0 (2026-02-01)
 
 ### Notes
