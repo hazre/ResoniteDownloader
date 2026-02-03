@@ -291,7 +291,9 @@ static class ResoniteDownloader
     var githubOutput = Environment.GetEnvironmentVariable("GITHUB_OUTPUT");
     if (!string.IsNullOrEmpty(githubOutput))
     {
-      await File.AppendAllTextAsync(githubOutput, $"version={version}\n");
+      await File.AppendAllTextAsync(githubOutput,
+          $"version={version}\n" +
+          $"build-id={version.Replace(".", "")}\n");
       if (!string.IsNullOrEmpty(manifestId))
         await File.AppendAllTextAsync(githubOutput, $"manifest-id={manifestId}\n");
     }
@@ -527,5 +529,6 @@ static class ResoniteDownloader
     await process.WaitForExitAsync();
     return process.ExitCode;
   }
+
 
 }
