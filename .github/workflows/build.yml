@@ -26,6 +26,9 @@ jobs:
         with:
           build: "true"
 
+      - name: Test
+        run: dotnet test --solution ResoniteDownloader.slnx -c Release
+
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
         with:
