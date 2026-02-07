@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
-using System.Text.Json;
 using System.CommandLine;
+using System.Text.Json;
 
 static class Program
 {
@@ -217,68 +217,53 @@ static class ResoniteDownloader
     if (version is null)
       return 1;
 
-    // If manifestId was provided, download Build.version to get the actual version
-    if (!string.IsNullOrEmpty(requestedManifestId))
+    // If no explicit version was provided, resolve the actual version from Build.version.
+    // For "latest", this asks DepotDownloader for the latest depot state.
+    var shouldDownloadBuildVersion = string.IsNullOrEmpty(requestedVersion);
+    var hasSteamCredentials = !string.IsNullOrEmpty(steamUser) && !string.IsNullOrEmpty(steamPass);
+
+    if (shouldDownloadBuildVersion && hasSteamCredentials)
     {
-      // Validate Steam credentials are provided
-      if (string.IsNullOrEmpty(steamUser) || string.IsNullOrEmpty(steamPass))
+      var label = string.IsNullOrEmpty(requestedManifestId) ? "latest build" : $"manifest {requestedManifestId}";
+      Console.WriteLine($"\nDownloading Build.version for {label}...");
+
+      var buildVersion = await DownloadBuildVersion(
+          requestedManifestId,
+          steamUser!,
+          steamPass!,
+          betaPass ?? "",
+          branch);
+
+      if (buildVersion is null)
       {
-        Console.Error.WriteLine("ERROR: --steam-user and --steam-pass are required when using --manifest-id");
+        Console.Error.WriteLine("ERROR: Failed to resolve version from Build.version");
         return 1;
       }
 
-      Console.WriteLine($"\nDownloading Build.version for manifest {requestedManifestId}...");
-
-      var tempDir = Path.Combine(Path.GetTempPath(), "resonite-version-check-" + Guid.NewGuid().ToString());
-      try
-      {
-        Directory.CreateDirectory(tempDir);
-
-        // Create filelist with just Build.version
-        var filelistPath = Path.Combine(tempDir, "files.txt");
-        await File.WriteAllTextAsync(filelistPath, "regex:Build\\.version\n");
-
-        // manifestId should not be null here since we passed requestedManifestId to ResolveVersion
-        if (string.IsNullOrEmpty(manifestId))
-        {
-          Console.Error.WriteLine("ERROR: Failed to resolve manifest ID");
-          return 1;
-        }
-
-        // Download just Build.version using the manifest
-        var exitCode = await RunDepotDownloaderWithFilelist(tempDir, filelistPath, manifestId,
-            steamUser, steamPass, betaPass ?? "", branch);
-
-        if (exitCode != 0)
-        {
-          Console.Error.WriteLine("ERROR: Failed to download Build.version");
-          return 1;
-        }
-
-        var buildVersionFile = Path.Combine(tempDir, "Build.version");
-        if (!File.Exists(buildVersionFile))
-        {
-          Console.Error.WriteLine("ERROR: Build.version not found after download");
-          return 1;
-        }
-
-        version = File.ReadAllText(buildVersionFile).Trim();
-        Console.WriteLine($"\nResolved version: {version}");
+      version = buildVersion;
+      Console.WriteLine($"\nResolved version: {version}");
+      if (!string.IsNullOrEmpty(manifestId))
         Console.WriteLine($"Manifest ID: {manifestId}");
-      }
-      finally
-      {
-        // Clean up temp directory
-        try
-        {
-          if (Directory.Exists(tempDir))
-            Directory.Delete(tempDir, recursive: true);
-        }
-        catch
-        {
-          // Ignore cleanup errors
-        }
-      }
+    }
+    else if (shouldDownloadBuildVersion && !string.IsNullOrEmpty(requestedManifestId))
+    {
+      Console.Error.WriteLine("ERROR: --steam-user and --steam-pass are required when using --manifest-id");
+      return 1;
+    }
+    else if (shouldDownloadBuildVersion)
+    {
+      Console.WriteLine("\nSteam credentials were not provided. Falling back to version monitor for latest version.");
+
+      var latestFromMonitor = await ResolveLatestFromMonitor(branch);
+      if (latestFromMonitor.version is null)
+        return 1;
+
+      version = latestFromMonitor.version;
+      manifestId = latestFromMonitor.manifestId;
+
+      Console.WriteLine($"\nResolved version: {version}");
+      if (!string.IsNullOrEmpty(manifestId))
+        Console.WriteLine($"Manifest ID: {manifestId}");
     }
     else
     {
@@ -319,46 +304,92 @@ static class ResoniteDownloader
       return ("manifest-" + requestedManifestId, requestedManifestId);
     }
 
-    // If only version is provided, use it but manifestId will be null
+    // If only version is provided, resolve its manifest ID from version monitor.
+    // DepotDownloader only resolves latest automatically when no manifest is supplied.
     if (!string.IsNullOrEmpty(requestedVersion))
     {
-      Console.WriteLine($"Using requested version: {requestedVersion}");
-      return (requestedVersion, null);
+      Console.WriteLine($"Resolving manifest ID for requested version '{requestedVersion}' on branch '{branch}'...");
+      try
+      {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var json = await http.GetStringAsync(VersionMonitorUrl);
+        var (version, manifestId) = ResolveVersionFromMonitorJson(json, branch, requestedVersion);
+
+        if (string.IsNullOrEmpty(manifestId))
+        {
+          Console.Error.WriteLine($"ERROR: Could not find manifest ID for version '{requestedVersion}' on branch '{branch}'");
+          return (null, null);
+        }
+
+        Console.WriteLine($"Resolved manifest ID: {manifestId}");
+        return (version, manifestId);
+      }
+      catch (HttpRequestException ex)
+      {
+        Console.Error.WriteLine($"ERROR: Failed to fetch version info: {ex.Message}");
+        return (null, null);
+      }
+      catch (TaskCanceledException)
+      {
+        Console.Error.WriteLine("ERROR: Timed out fetching version info");
+        return (null, null);
+      }
+      catch (JsonException ex)
+      {
+        Console.Error.WriteLine($"ERROR: Invalid JSON from version monitor: {ex.Message}");
+        return (null, null);
+      }
     }
 
-    // Neither version nor manifestId provided - fetch latest from API
-    Console.WriteLine($"Fetching latest Resonite version for branch '{branch}'...");
+    // Neither version nor manifestId provided - use latest directly from Steam/depot
+    Console.WriteLine($"No version or manifest provided for branch '{branch}', using latest");
+    return ("latest", null);
+  }
+
+  private static (string? version, string? manifestId) ResolveVersionFromMonitorJson(string json, string branch, string requestedVersion)
+  {
+    var data = JsonDocument.Parse(json);
+
+    if (!data.RootElement.TryGetProperty(branch, out var branchArray))
+    {
+      Console.Error.WriteLine($"ERROR: Version monitor response missing '{branch}' field");
+      Console.Error.WriteLine($"Available fields: {string.Join(", ", data.RootElement.EnumerateObject().Select(p => p.Name))}");
+      return (null, null);
+    }
+
+    var versionEntry = branchArray
+      .EnumerateArray()
+      .Select(v => new
+      {
+        Version = v.TryGetProperty("gameVersion", out var gv) ? gv.GetString() : null,
+        ManifestId = v.TryGetProperty("manifestId", out var mid) ? mid.GetString() : null
+      })
+      .FirstOrDefault(v =>
+        !string.IsNullOrEmpty(v.Version) &&
+        string.Equals(v.Version, requestedVersion, StringComparison.Ordinal));
+
+    if (versionEntry is null)
+      return (null, null);
+
+    return (versionEntry.Version, versionEntry.ManifestId);
+  }
+
+  private static async Task<(string? version, string? manifestId)> ResolveLatestFromMonitor(string branch)
+  {
+    Console.WriteLine($"Fetching latest Resonite version for branch '{branch}' from version monitor...");
     try
     {
       using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
       var json = await http.GetStringAsync(VersionMonitorUrl);
-      var data = JsonDocument.Parse(json);
+      var (version, manifestId) = ResolveLatestFromMonitorJson(json, branch);
 
-      if (!data.RootElement.TryGetProperty(branch, out var branchArray))
-      {
-        Console.Error.WriteLine($"ERROR: Version monitor response missing '{branch}' field");
-        Console.Error.WriteLine($"Available fields: {string.Join(", ", data.RootElement.EnumerateObject().Select(p => p.Name))}");
-        return (null, null);
-      }
-
-      var versionEntry = branchArray
-          .EnumerateArray()
-          .Select(v => new
-          {
-            Version = v.TryGetProperty("gameVersion", out var gv) ? gv.GetString() : null,
-            ManifestId = v.TryGetProperty("manifestId", out var mid) ? mid.GetString() : null
-          })
-          .Where(v => !string.IsNullOrEmpty(v.Version) && Version.TryParse(v.Version, out _))
-          .OrderByDescending(v => Version.Parse(v.Version!))
-          .FirstOrDefault();
-
-      if (versionEntry is null || string.IsNullOrEmpty(versionEntry.Version))
+      if (string.IsNullOrEmpty(version))
       {
         Console.Error.WriteLine($"ERROR: Failed to fetch latest version from resonite-version-monitor for branch '{branch}'");
         return (null, null);
       }
 
-      return (versionEntry.Version, versionEntry.ManifestId);
+      return (version, manifestId);
     }
     catch (HttpRequestException ex)
     {
@@ -374,6 +405,68 @@ static class ResoniteDownloader
     {
       Console.Error.WriteLine($"ERROR: Invalid JSON from version monitor: {ex.Message}");
       return (null, null);
+    }
+  }
+
+  private static (string? version, string? manifestId) ResolveLatestFromMonitorJson(string json, string branch)
+  {
+    var data = JsonDocument.Parse(json);
+
+    if (!data.RootElement.TryGetProperty(branch, out var branchArray))
+    {
+      Console.Error.WriteLine($"ERROR: Version monitor response missing '{branch}' field");
+      Console.Error.WriteLine($"Available fields: {string.Join(", ", data.RootElement.EnumerateObject().Select(p => p.Name))}");
+      return (null, null);
+    }
+
+    var versionEntry = branchArray
+      .EnumerateArray()
+      .Select(v => new
+      {
+        Version = v.TryGetProperty("gameVersion", out var gv) ? gv.GetString() : null,
+        ManifestId = v.TryGetProperty("manifestId", out var mid) ? mid.GetString() : null
+      })
+      .Where(v => !string.IsNullOrEmpty(v.Version) && Version.TryParse(v.Version, out _))
+      .OrderByDescending(v => Version.Parse(v.Version!))
+      .FirstOrDefault();
+
+    if (versionEntry is null)
+      return (null, null);
+
+    return (versionEntry.Version, versionEntry.ManifestId);
+  }
+
+  private static async Task<string?> DownloadBuildVersion(string? manifestId, string steamUser, string steamPass, string betaPass, string branch)
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), "resonite-version-check-" + Guid.NewGuid());
+    try
+    {
+      Directory.CreateDirectory(tempDir);
+
+      var filelistPath = Path.Combine(tempDir, "files.txt");
+      await File.WriteAllTextAsync(filelistPath, "regex:Build\\.version\n");
+
+      var exitCode = await RunDepotDownloaderWithFilelist(tempDir, filelistPath, manifestId, steamUser, steamPass, betaPass, branch);
+      if (exitCode != 0)
+        return null;
+
+      var buildVersionFile = Path.Combine(tempDir, "Build.version");
+      if (!File.Exists(buildVersionFile))
+        return null;
+
+      return File.ReadAllText(buildVersionFile).Trim();
+    }
+    finally
+    {
+      try
+      {
+        if (Directory.Exists(tempDir))
+          Directory.Delete(tempDir, recursive: true);
+      }
+      catch
+      {
+        // Ignore cleanup errors
+      }
     }
   }
 
@@ -471,19 +564,7 @@ static class ResoniteDownloader
 
   private static async Task<int> RunDepotDownloader(string gameDir, string? manifestId, string steamUser, string steamPass, string betaPass, string branch)
   {
-    var args = $"-app {AppId} -depot {DepotId} -username {steamUser} -password {steamPass} -dir {gameDir}";
-
-    // Add manifest if provided
-    if (!string.IsNullOrEmpty(manifestId))
-    {
-      args += $" -manifest {manifestId}";
-    }
-
-    // Only add beta args if downloading headless branch
-    if (branch == "headless")
-    {
-      args += $" -beta {branch} -betapassword {betaPass}";
-    }
+    var args = BuildDepotDownloaderArgs(gameDir, steamUser, steamPass, betaPass, branch, manifestId);
 
     var startInfo = new ProcessStartInfo("DepotDownloader")
     {
@@ -503,15 +584,9 @@ static class ResoniteDownloader
   }
 
   private static async Task<int> RunDepotDownloaderWithFilelist(string gameDir, string filelistPath,
-      string manifestId, string steamUser, string steamPass, string betaPass, string branch)
+      string? manifestId, string steamUser, string steamPass, string betaPass, string branch)
   {
-    var args = $"-app {AppId} -depot {DepotId} -manifest {manifestId} -beta {branch} -username {steamUser} -password {steamPass} -dir {gameDir} -filelist \"{filelistPath}\"";
-
-    // Add beta args if downloading headless or other protected branch
-    if (!string.IsNullOrEmpty(betaPass))
-    {
-      args += $" -betapassword {betaPass}";
-    }
+    var args = BuildDepotDownloaderArgs(gameDir, steamUser, steamPass, betaPass, branch, manifestId, filelistPath);
 
     var startInfo = new ProcessStartInfo("DepotDownloader")
     {
@@ -530,5 +605,25 @@ static class ResoniteDownloader
     return process.ExitCode;
   }
 
+  private static string BuildDepotDownloaderArgs(string gameDir, string steamUser, string steamPass, string betaPass, string branch, string? manifestId = null, string? filelistPath = null)
+  {
+    var args = $"-app {AppId} -depot {DepotId} -beta {branch} -username {steamUser} -password {steamPass} -dir {gameDir}";
 
+    if (!string.IsNullOrEmpty(manifestId))
+    {
+      args += $" -manifest {manifestId}";
+    }
+
+    if (!string.IsNullOrEmpty(betaPass))
+    {
+      args += $" -betapassword {betaPass}";
+    }
+
+    if (!string.IsNullOrEmpty(filelistPath))
+    {
+      args += $" -filelist \"{filelistPath}\"";
+    }
+
+    return args;
+  }
 }
