@@ -27,7 +27,37 @@ jobs:
           build: "true"
 
       - name: Test
-        run: dotnet test --solution ResoniteDownloader.slnx -c Release
+        shell: nu {0}
+        run: dotnet test --solution ResoniteDownloader.slnx -c Release --no-build
+
+      - name: Install CLI Tool From Package
+        shell: nu {0}
+        env:
+          TOOL_VERSION: ${{ steps.setup.outputs.version }}
+        run: dotnet tool install --global --add-source ./build --version $env.TOOL_VERSION hazre.ResoniteDownloader
+
+      - name: Smoke Test CLI Resolve-Version
+        shell: nu {0}
+        run: resonitedownloader resolve-version --branch public
+
+      - name: Setup DepotDownloader
+        uses: hazre/setup-depotdownloader@76cbc043bebf70dd4328d5864254afb715bf370f # v1.0.0
+        with:
+          version: "3.4.0"
+
+      - name: Integration Test CLI Download
+        shell: nu {0}
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+        run: |
+          if not ("./test-resonite" | path exists) {
+            mkdir ./test-resonite
+          }
+          resonitedownloader download --game-dir ./test-resonite --steam-user $env.STEAM_USERNAME --steam-pass $env.STEAM_PASSWORD --branch public
+          if not ("./test-resonite/Build.version" | path exists) {
+            error make { msg: "Build.version not found after CLI download" }
+          }
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
