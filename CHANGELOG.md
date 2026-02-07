@@ -1,3 +1,13 @@
+## 1.1.0 (2026-02-07)
+
+### Features
+
+- add nix flake support
+
+### Fixes
+
+- resolve versions conditionally and unify depot args
+
 ## 1.0.1 (2026-02-03)
 
 ### Fixes
