@@ -474,13 +474,13 @@ static class ResoniteDownloader
       string? manifestId, string steamUser, string steamPass, string betaPass, string branch)
   {
     var buildVersionFile = Path.Combine(gameDir, "Build.version");
-    var resoniteDll = Path.Combine(targetDir, "Resonite.dll");
+    var resoniteExecutable = Path.Combine(targetDir, "Resonite.exe");
 
     var installedVersion = File.Exists(buildVersionFile)
         ? File.ReadAllText(buildVersionFile).Trim()
         : null;
 
-    var needsDownload = DetermineIfDownloadNeeded(resoniteDll, installedVersion, targetVersion);
+    var needsDownload = DetermineIfDownloadNeeded(resoniteExecutable, installedVersion, targetVersion);
 
     if (!needsDownload)
       return true;
@@ -496,9 +496,9 @@ static class ResoniteDownloader
       return false;
     }
 
-    if (!File.Exists(resoniteDll))
+    if (!File.Exists(resoniteExecutable))
     {
-      Console.Error.WriteLine("ERROR: Download failed - Resonite.dll not found");
+      Console.Error.WriteLine("ERROR: Download failed - Resonite.exe not found");
       return false;
     }
 
@@ -510,9 +510,9 @@ static class ResoniteDownloader
     return true;
   }
 
-  private static bool DetermineIfDownloadNeeded(string resoniteDll, string? installedVersion, string targetVersion)
+  private static bool DetermineIfDownloadNeeded(string resoniteExecutable, string? installedVersion, string targetVersion)
   {
-    if (!File.Exists(resoniteDll))
+    if (!File.Exists(resoniteExecutable))
     {
       Console.WriteLine("Resonite not found, download required");
       return true;

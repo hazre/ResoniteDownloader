@@ -13,7 +13,7 @@ public class CommandFlowTests
 
     try
     {
-      File.WriteAllText(Path.Combine(gameDir, "Resonite.dll"), "x");
+      File.WriteAllText(Path.Combine(gameDir, "Resonite.exe"), "x");
       File.WriteAllText(Path.Combine(gameDir, "Build.version"), "2026.2.1.5");
       Environment.SetEnvironmentVariable("GITHUB_OUTPUT", outputFile);
 
@@ -45,7 +45,7 @@ public class CommandFlowTests
 
     try
     {
-      File.WriteAllText(Path.Combine(headlessDir, "Resonite.dll"), "x");
+      File.WriteAllText(Path.Combine(headlessDir, "Resonite.exe"), "x");
       File.WriteAllText(Path.Combine(gameDir, "Build.version"), "2026.2.1.5");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DownloadCommand");

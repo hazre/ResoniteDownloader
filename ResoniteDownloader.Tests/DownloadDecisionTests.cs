@@ -6,10 +6,10 @@ namespace ResoniteDownloader.Tests;
 public class DownloadDecisionTests
 {
   [Fact]
-  public void DetermineIfDownloadNeeded_WhenDllMissing_ReturnsTrue()
+  public void DetermineIfDownloadNeeded_WhenExecutableMissing_ReturnsTrue()
   {
     var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-    var result = (bool)method.Invoke(null, ["C:\\does-not-exist\\Resonite.dll", "2026.2.1.1", "2026.2.1.1"])!;
+    var result = (bool)method.Invoke(null, ["C:\\does-not-exist\\Resonite.exe", "2026.2.1.1", "2026.2.1.1"])!;
     Assert.True(result);
   }
 
@@ -19,11 +19,11 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
-      File.WriteAllText(dllPath, "x");
+      var exePath = Path.Combine(dir, "Resonite.exe");
+      File.WriteAllText(exePath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-      var result = (bool)method.Invoke(null, [dllPath, null, "2026.2.1.1"])!;
+      var result = (bool)method.Invoke(null, [exePath, null, "2026.2.1.1"])!;
       Assert.True(result);
     }
     finally
@@ -38,11 +38,11 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
-      File.WriteAllText(dllPath, "x");
+      var exePath = Path.Combine(dir, "Resonite.exe");
+      File.WriteAllText(exePath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-      var result = (bool)method.Invoke(null, [dllPath, "invalid", "2026.2.1.1"])!;
+      var result = (bool)method.Invoke(null, [exePath, "invalid", "2026.2.1.1"])!;
       Assert.True(result);
     }
     finally
@@ -57,11 +57,11 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
-      File.WriteAllText(dllPath, "x");
+      var exePath = Path.Combine(dir, "Resonite.exe");
+      File.WriteAllText(exePath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-      var result = (bool)method.Invoke(null, [dllPath, "2026.2.1.1", "invalid"])!;
+      var result = (bool)method.Invoke(null, [exePath, "2026.2.1.1", "invalid"])!;
       Assert.True(result);
     }
     finally
@@ -76,11 +76,11 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
-      File.WriteAllText(dllPath, "x");
+      var exePath = Path.Combine(dir, "Resonite.exe");
+      File.WriteAllText(exePath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-      var result = (bool)method.Invoke(null, [dllPath, "2026.2.1.1", "2026.2.1.1"])!;
+      var result = (bool)method.Invoke(null, [exePath, "2026.2.1.1", "2026.2.1.1"])!;
       Assert.False(result);
     }
     finally
@@ -95,11 +95,11 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
-      File.WriteAllText(dllPath, "x");
+      var exePath = Path.Combine(dir, "Resonite.exe");
+      File.WriteAllText(exePath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-      var result = (bool)method.Invoke(null, [dllPath, "2026.2.1.2", "2026.2.1.1"])!;
+      var result = (bool)method.Invoke(null, [exePath, "2026.2.1.2", "2026.2.1.1"])!;
       Assert.False(result);
     }
     finally
@@ -114,11 +114,11 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
-      File.WriteAllText(dllPath, "x");
+      var exePath = Path.Combine(dir, "Resonite.exe");
+      File.WriteAllText(exePath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-      var result = (bool)method.Invoke(null, [dllPath, "2026.2.1.1", "2026.2.1.2"])!;
+      var result = (bool)method.Invoke(null, [exePath, "2026.2.1.1", "2026.2.1.2"])!;
       Assert.True(result);
     }
     finally
