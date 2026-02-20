@@ -1,3 +1,9 @@
+## 1.1.1 (2026-02-20)
+
+### Fixes
+
+- use Resonite.exe to validate successful downloads (#8)
+
 ## 1.1.0 (2026-02-07)
 
 ### Features
