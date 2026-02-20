@@ -6,10 +6,10 @@ namespace ResoniteDownloader.Tests;
 public class DownloadDecisionTests
 {
   [Fact]
-  public void DetermineIfDownloadNeeded_WhenDllMissing_ReturnsTrue()
+  public void DetermineIfDownloadNeeded_WhenExeMissing_ReturnsTrue()
   {
     var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
-    var result = (bool)method.Invoke(null, ["C:\\does-not-exist\\Resonite.dll", "2026.2.1.1", "2026.2.1.1"])!;
+    var result = (bool)method.Invoke(null, ["C:\\does-not-exist\\Resonite.exe", "2026.2.1.1", "2026.2.1.1"])!;
     Assert.True(result);
   }
 
@@ -19,7 +19,7 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
+      var dllPath = Path.Combine(dir, "Resonite.exe");
       File.WriteAllText(dllPath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
@@ -38,7 +38,7 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
+      var dllPath = Path.Combine(dir, "Resonite.exe");
       File.WriteAllText(dllPath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
@@ -57,7 +57,7 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
+      var dllPath = Path.Combine(dir, "Resonite.exe");
       File.WriteAllText(dllPath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
@@ -76,7 +76,7 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
+      var dllPath = Path.Combine(dir, "Resonite.exe");
       File.WriteAllText(dllPath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
@@ -95,7 +95,7 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
+      var dllPath = Path.Combine(dir, "Resonite.exe");
       File.WriteAllText(dllPath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
@@ -114,7 +114,7 @@ public class DownloadDecisionTests
     var dir = CreateTempDir();
     try
     {
-      var dllPath = Path.Combine(dir, "Resonite.dll");
+      var dllPath = Path.Combine(dir, "Resonite.exe");
       File.WriteAllText(dllPath, "x");
 
       var method = ReflectionTestHelpers.GetDownloaderMethod("DetermineIfDownloadNeeded");
